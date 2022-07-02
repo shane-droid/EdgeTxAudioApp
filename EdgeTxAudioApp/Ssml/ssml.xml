@@ -1,0 +1,8 @@
+﻿<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="(xmlLang)">
+  <voice name="(voice)">
+    <mstts:silence  type="Sentenceboundary " value="200ms"/>
+    <mstts:express-as style="(mood)">
+    (speechText)
+    </mstts:express-as>
+  </voice>
+</speak>

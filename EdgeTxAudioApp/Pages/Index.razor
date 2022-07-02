@@ -1,0 +1,419 @@
+﻿@page "/"
+@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+@using System.Text.Json
+
+@using EdgeTxAudioApp.Models;
+@using Microsoft.CognitiveServices.Speech
+@using Microsoft.CognitiveServices.Speech.Audio
+@using System.IO
+@using System;
+@using System.Diagnostics;
+<h1>EdgeTX Audio</h1>
+<br />
+<p style="background-color: DeepSkyBlue;">
+    <ul>
+        <li>Creates wave sound files from microsoft azure speech services</li>
+        <li>processess the sound files with ffmpeg</li>
+        <li>saves a copy of raw audio & processed audio</li>
+        <li>skips processing files if they already exist</li>
+    </ul>
+</p>
+
+go to<a href="https://portal.azure.com/"> https://portal.azure.com/</a>    1. make an account. 2. setup cognitive speach service [its free but needs a credit card to verify]
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">1. Add Azure Key</h3>
+<br />
+
+<br />
+<input id="key" type="text" width="600" @oninput="@((ui) => { OnValueAzureKeyChanged((string)ui.Value );})" placeholder="ENTER NEW KEY">
+Configuration value for 'Key': @Configuration["Key"]
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">2. Add Azure cognitive services region</h3>
+<br />
+
+<br />
+<input id="key" type="text" @oninput="@((ui) => { OnValueAzureRegionChanged((string)ui.Value );})" placeholder="ENTER NEW REGION">
+Configuration value for 'Region': @Configuration["Region"]
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">3. Add FilePath to CSV</h3>
+<br />
+<ul>
+    <li>download a csv file from here: <a href="hhttps://github.com/EdgeTX/edgetx-sdcard-sounds/tree/main/voices"> github </a></li>
+    <li>EDIT CSV: the <b>TRANSLATION</b> column is what is output to wav files.</li>
+</ul>
+
+<br />
+<input id="key" type="text" @oninput="@((ui) => { UpdateAppSetting("CsvPath", (string)ui.Value );})" placeholder="ENTER NEW CSV PATH">
+Full csv local filepath eg: @Configuration["CsvPath"]
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">4. Load the CSV FILE</h3>
+<br />
+<button @onclick="LoadCSV">Load CSV</button>
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">4.1. enter language character set used in csv file</h3>
+<br />
+
+<br />
+<input id="key" type="text" @oninput="@((ui) => { UpdateAppSetting("xmlLanguage", (string)ui.Value );})" placeholder="csv Lang">
+Current CSV language set is: @Configuration["xmlLanguage"]
+<br />
+
+<br />
+
+<br />
+<h3 style="background-color:DodgerBlue;">4.2. enter a voice emotion</h3>
+<br />
+<br />
+<input id="key" type="text" @oninput="@((ui) => { UpdateAppSetting("mood", (string)ui.Value );})" placeholder="mood">
+Current emotion is: @Configuration["mood"]
+<br />
+<br />
+<div class="has-inner-focus">
+    <table aria-label="Table 5" class="table table-sm">
+        <thead>
+            <tr>
+                <th>Style</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>advertisement-upbeat</code></td>
+                <td>Expresses an excited and high-energy tone for promoting a product or service.</td>
+            </tr>
+            <tr>
+                <td><code>affectionate</code></td>
+                <td>Expresses a warm and affectionate tone, with higher pitch and vocal energy. The speaker is in a state of attracting the attention of the listener. The personality of the speaker is often endearing in nature.</td>
+            </tr>
+            <tr>
+                <td><code>angry</code></td>
+                <td>Expresses an angry and annoyed tone.</td>
+            </tr>
+            <tr>
+                <td><code>assistant</code></td>
+                <td>Expresses a warm and relaxed tone for digital assistants.</td>
+            </tr>
+            <tr>
+                <td><code>calm</code></td>
+                <td>Expresses a cool, collected, and composed attitude when speaking. Tone, pitch, and prosody are more uniform compared to other types of speech.</td>
+            </tr>
+            <tr>
+                <td><code>chat</code></td>
+                <td>Expresses a casual and relaxed tone.</td>
+            </tr>
+            <tr>
+                <td><code>cheerful</code></td>
+                <td>Expresses a positive and happy tone.</td>
+            </tr>
+            <tr>
+                <td><code>customerservice</code></td>
+                <td>Expresses a friendly and helpful tone for customer support.</td>
+            </tr>
+            <tr>
+                <td><code>depressed</code></td>
+                <td>Expresses a melancholic and despondent tone with lower pitch and energy.</td>
+            </tr>
+            <tr>
+                <td><code>disgruntled</code></td>
+                <td>Expresses a disdainful and complaining tone. Speech of this emotion displays displeasure and contempt.</td>
+            </tr>
+            <tr>
+                <td><code>embarrassed</code></td>
+                <td>Expresses an uncertain and hesitant tone when the speaker is feeling uncomfortable.</td>
+            </tr>
+            <tr>
+                <td><code>empathetic</code></td>
+                <td>Expresses a sense of caring and understanding.</td>
+            </tr>
+            <tr>
+                <td><code>envious</code></td>
+                <td>Expresses a tone of admiration when you desire something that someone else has.</td>
+            </tr>
+            <tr>
+                <td><code>excited</code></td>
+                <td>Expresses an upbeat and hopeful tone. It sounds like something great is happening and the speaker is really happy about that.</td>
+            </tr>
+            <tr>
+                <td><code>fearful</code></td>
+                <td>Expresses a scared and nervous tone, with higher pitch, higher vocal energy, and faster rate. The speaker is in a state of tension and unease.</td>
+            </tr>
+            <tr>
+                <td><code>friendly</code></td>
+                <td>Expresses a pleasant, inviting, and warm tone. It sounds sincere and caring.</td>
+            </tr>
+            <tr>
+                <td><code>gentle</code></td>
+                <td>Expresses a mild, polite, and pleasant tone, with lower pitch and vocal energy.</td>
+            </tr>
+            <tr>
+                <td><code>hopeful</code></td>
+                <td>Expresses a warm and yearning tone. It sounds like something good will happen to the speaker.</td>
+            </tr>
+            <tr>
+                <td><code>lyrical</code></td>
+                <td>Expresses emotions in a melodic and sentimental way.</td>
+            </tr>
+            <tr>
+                <td><code>narration-professional</code></td>
+                <td>Expresses a professional, objective tone for content reading.</td>
+            </tr>
+            <tr>
+                <td><code>narration-relaxed</code></td>
+                <td>Express a soothing and melodious tone for content reading.</td>
+            </tr>
+            <tr>
+                <td><code>newscast</code></td>
+                <td>Expresses a formal and professional tone for narrating news.</td>
+            </tr>
+            <tr>
+                <td><code>newscast-casual</code></td>
+                <td>Expresses a versatile and casual tone for general news delivery.</td>
+            </tr>
+            <tr>
+                <td><code>newscast-formal</code></td>
+                <td>Expresses a formal, confident, and authoritative tone for news delivery.</td>
+            </tr>
+            <tr>
+                <td><code>poetry-reading</code></td>
+                <td>Expresses an emotional and rhythmic tone while reading a poem.</td>
+            </tr>
+            <tr>
+                <td><code>sad</code></td>
+                <td>Expresses a sorrowful tone.</td>
+            </tr>
+            <tr>
+                <td><code>serious</code></td>
+                <td>Expresses a strict and commanding tone. Speaker often sounds stiffer and much less relaxed with firm cadence.</td>
+            </tr>
+            <tr>
+                <td><code>shouting</code></td>
+                <td>Speaks like from a far distant or outside and to make self be clearly heard</td>
+            </tr>
+            <tr>
+                <td><code>sports-commentary</code></td>
+                <td>Expresses a relaxed and interesting tone for broadcasting a sports event.</td>
+            </tr>
+            <tr>
+                <td><code>sports-commentary-excited</code></td>
+                <td>Expresses an intensive and energetic tone for broadcasting exciting moments in a sports event.</td>
+            </tr>
+            <tr>
+                <td><code>whispering</code></td>
+                <td>Speaks very softly and make a quiet and gentle sound</td>
+            </tr>
+            <tr>
+                <td><code>terrified</code></td>
+                <td>Expresses a very scared tone, with faster pace and a shakier voice. It sounds like the speaker is in an unsteady and frantic status.</td>
+            </tr>
+            <tr>
+                <td><code>unfriendly</code></td>
+                <td>Expresses a cold and indifferent tone.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<br />
+<br />
+
+<h3 style="background-color:DodgerBlue;">5. Path to output Directory</h3>
+<br />
+Output Dir: @Configuration["OutputDir"]
+<br />
+<input id="key" type="text" @oninput="@((ui) => { UpdateAppSetting("OutputDir", (string)ui.Value );})" placeholder="ENTER NEW OUTPUT DIR">
+<br />
+<br />
+<h3 style="background-color:DodgerBlue;">6. Load and select a voice</h3>
+<br />
+<button @onclick="() => GetLanguageNames()">Get Voice List</button>
+<br />
+<select id="Select" @oninput="@((ui) => { OnValueChanged((string)ui.Value );})" title="voice is required ">
+
+    @for (int i = 0; i < voicesList.Count; i++)
+    {
+        <option value="@voicesList.ElementAt(i).ShortName"> @voicesList.ElementAt(i).ShortName</option>
+    }
+
+</select>
+<button @onclick="SynthesizeAudioToSpeakerAsync">Test Voice</button>
+<br>
+<br>
+
+<h2 style="background-color:DodgerBlue;">7. Create sound pack</h2>
+<br />
+<button @onclick="SynthesizeSsmlAudioAsync">Create Sounds</button>
+<br />
+
+<h1>Files</h1>
+
+<ul>
+    @foreach (var file in listOfSpeachFiles)
+    {
+        <li>@file.Filename</li>
+    }
+</ul>
+
+
+
+@code
+{
+
+    List<SpeachFileModel> listOfSpeachFiles = new List<SpeachFileModel>();
+    List<VoiceInfo> voicesList = new List<VoiceInfo>();
+    public string SelectedVoiceInfoIndex
+    {
+        get;
+        set;
+    }
+    public string AzureKey
+    {
+        get;
+        set;
+    }
+    public void OnValueAzureKeyChanged(string e)
+    {
+        AzureKey = e;
+
+    }
+    public string AzureRegion
+    {
+        get;
+        set;
+    }
+    public void OnValueAzureRegionChanged(string e)
+    {
+        AzureRegion = e;
+
+    }
+
+
+
+
+    public void UpdateAppSetting(string key, string value)
+    {
+        var configJson = File.ReadAllText("appsettings.json");
+        var config = JsonSerializer.Deserialize<Dictionary<string, object>>(configJson);
+        config[key] = value;
+        var updatedConfigJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText("appsettings.json", updatedConfigJson);
+    }
+    void CSVChanged(ChangeEventArgs e)
+    {
+        UpdateAppSetting("CsvPath", e.Value.ToString());
+        Configuration["CsvPath"] = e.Value.ToString();
+    }
+
+    private void LoadCSV()
+    {
+        using (var reader = new StreamReader(Configuration["CsvPath"]))
+        {
+            while (!reader.EndOfStream)
+            {
+                var line = reader.ReadLine();
+                var values = line.Split(',');
+                SpeachFileModel SpeachFile = new SpeachFileModel();
+                SpeachFile.Id = values[0];
+                SpeachFile.SourceText = values[1];
+                SpeachFile.Translation = values[2];
+                SpeachFile.Context = values[3];
+                SpeachFile.Path = values[4];
+                SpeachFile.Filename = values[5];
+
+                listOfSpeachFiles.Add(SpeachFile);
+            }
+        }
+    }
+
+    async Task SynthesizeSsmlAudioAsync()
+    {
+
+
+        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+
+
+        string ssml = File.ReadAllText("./Ssml/ssml.xml")
+
+                  .Replace("(voice)", SelectedVoiceInfoIndex)
+                  .Replace("(xmlLang)", Configuration.GetValue<string>("xmlLanguage"))
+                  .Replace("(mood)", Configuration.GetValue<string>("mood"));
+
+
+        string path = Configuration["OutputDir"] + "\\Raw\\";
+        string pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
+        if (System.IO.Directory.Exists(Configuration["OutputDir"]) & System.IO.File.Exists(Configuration["CsvPath"]))
+        {
+            for (int i = 1; i < listOfSpeachFiles.Count; i++)
+            {
+
+                if (listOfSpeachFiles.ElementAt(i).Path != null)
+                {
+                    path += listOfSpeachFiles.ElementAt(i).Path + @"\";
+                    pathFfmpegOutput += listOfSpeachFiles.ElementAt(i).Path + @"\";
+                }
+                System.IO.Directory.CreateDirectory(path);
+                System.IO.Directory.CreateDirectory(pathFfmpegOutput);
+
+                if (!System.IO.File.Exists(path + listOfSpeachFiles.ElementAt(i).Filename))
+                {
+                    string ssmlTemp = ssml.Replace("(speechText)", listOfSpeachFiles.ElementAt(i).Translation);
+
+                    using var synthesizer = new SpeechSynthesizer(config, null);
+
+                    await AudioDataStream.FromResult(await synthesizer.SpeakSsmlAsync(ssmlTemp)).SaveToWaveFileAsync(path + listOfSpeachFiles.ElementAt(i).Filename);
+                    await FFmpeg(path + listOfSpeachFiles.ElementAt(i).Filename, pathFfmpegOutput + listOfSpeachFiles.ElementAt(i).Filename);
+
+                    path = Configuration["OutputDir"] + "\\Raw\\";
+                    pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
+
+                }
+            }
+        }
+    }
+
+    private async Task FFmpeg(string fileInput, string fileOutput)
+    {
+
+        string flags = "\"silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse\"";
+        using (var process = new Process())
+        {
+            process.StartInfo.FileName = @".\Utils\ffmpeg.exe";
+            process.StartInfo.UseShellExecute = true;
+            process.StartInfo.Arguments = $"-i {fileInput} -af {flags} {fileOutput}";
+            process.Start();
+        }
+
+
+    }
+    async Task GetLanguageNames()
+    {
+        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+        using SpeechSynthesizer speechSynthesizer = new SpeechSynthesizer(config);
+        using var result = await speechSynthesizer.GetVoicesAsync();
+
+        voicesList = result.Voices.ToList<VoiceInfo>();
+
+    }
+
+
+    public void OnValueChanged(string e)
+    {
+        SelectedVoiceInfoIndex = e;
+
+    }
+    async Task SynthesizeAudioToSpeakerAsync()
+    {
+
+        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+        config.SpeechSynthesisVoiceName = SelectedVoiceInfoIndex;
+        using var synthesizer = new SpeechSynthesizer(config);
+
+
+        await synthesizer.SpeakTextAsync("Welcome to Edge Tea X");
+    }
+}
