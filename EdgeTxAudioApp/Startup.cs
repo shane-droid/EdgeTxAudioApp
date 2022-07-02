@@ -30,6 +30,7 @@ namespace EdgeTxAudioApp
             services.AddRazorPages();
             services.AddServerSideBlazor();
             
+            
             services.AddSingleton<IConfiguration>(Configuration);
         }
 

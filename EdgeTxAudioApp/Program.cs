@@ -23,6 +23,7 @@ namespace EdgeTxAudioApp
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
+                   
                 });
     }
 }
