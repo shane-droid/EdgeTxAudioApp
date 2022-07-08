@@ -2,7 +2,7 @@
 @using Microsoft.Extensions.Configuration
 @inject IConfiguration Configuration
 @using System.Text.Json
-
+@inject IJSRuntime JsRuntime
 @using EdgeTxAudioApp.Models;
 @using Microsoft.CognitiveServices.Speech
 @using Microsoft.CognitiveServices.Speech.Audio
@@ -55,6 +55,14 @@ Full csv local filepath eg: @Configuration["CsvPath"]
 <br />
 <button @onclick="LoadCSV">Load CSV</button>
 <br />
+<h1>Sound Files to process</h1>
+
+<ul>
+    @foreach (var file in listOfSpeachFiles)
+    {
+        <li>@file.Filename</li>
+    }
+</ul>
 <br />
 <h3 style="background-color:DodgerBlue;">4.1. enter language character set used in csv file</h3>
 <br />
@@ -250,14 +258,9 @@ Output Dir: @Configuration["OutputDir"]
 <button @onclick="SynthesizeSsmlAudioAsync">Create Sounds</button>
 <br />
 
-<h1>Files</h1>
+<h1>last file completed = @fileCompleted </h1>
 
-<ul>
-    @foreach (var file in listOfSpeachFiles)
-    {
-        <li>@file.Filename</li>
-    }
-</ul>
+
 
 
 
@@ -291,6 +294,11 @@ Output Dir: @Configuration["OutputDir"]
         AzureRegion = e;
 
     }
+    public string fileCompleted
+    {
+        get;
+        set;
+    }
 
 
 
@@ -311,92 +319,139 @@ Output Dir: @Configuration["OutputDir"]
 
     private void LoadCSV()
     {
-        using (var reader = new StreamReader(Configuration["CsvPath"]))
-        {
-            while (!reader.EndOfStream)
-            {
-                var line = reader.ReadLine();
-                var values = line.Split(',');
-                SpeachFileModel SpeachFile = new SpeachFileModel();
-                SpeachFile.Id = values[0];
-                SpeachFile.SourceText = values[1];
-                SpeachFile.Translation = values[2];
-                SpeachFile.Context = values[3];
-                SpeachFile.Path = values[4];
-                SpeachFile.Filename = values[5];
 
-                listOfSpeachFiles.Add(SpeachFile);
+        try
+        {
+            using (var reader = new StreamReader(Configuration["CsvPath"]))
+            {
+                while (!reader.EndOfStream)
+                {
+                    var line = reader.ReadLine();
+                    var values = line.Split(',');
+                    SpeachFileModel SpeachFile = new SpeachFileModel();
+                    SpeachFile.Id = values[0];
+                    SpeachFile.SourceText = values[1];
+                    SpeachFile.Translation = values[2];
+                    SpeachFile.Context = values[3];
+                    SpeachFile.Path = values[4];
+                    SpeachFile.Filename = values[5];
+
+                    listOfSpeachFiles.Add(SpeachFile);
+                }
             }
+            JsRuntime.InvokeVoidAsync("alert", "csv file added"); // Alert
         }
+        catch (Exception er)
+        {
+            JsRuntime.InvokeVoidAsync("alert", er.Message); // Alert
+        }
+
+
+
     }
 
     async Task SynthesizeSsmlAudioAsync()
     {
 
 
-        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
 
-
-        string ssml = File.ReadAllText("./Ssml/ssml.xml")
+        try
+        {
+            var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+            string ssml = File.ReadAllText("./Ssml/ssml.xml")
 
                   .Replace("(voice)", SelectedVoiceInfoIndex)
                   .Replace("(xmlLang)", Configuration.GetValue<string>("xmlLanguage"))
                   .Replace("(mood)", Configuration.GetValue<string>("mood"));
 
 
-        string path = Configuration["OutputDir"] + "\\Raw\\";
-        string pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
-        if (System.IO.Directory.Exists(Configuration["OutputDir"]) & System.IO.File.Exists(Configuration["CsvPath"]))
-        {
-            for (int i = 1; i < listOfSpeachFiles.Count; i++)
+            string path = Configuration["OutputDir"] + "\\Raw\\";
+            string pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
+            if (System.IO.Directory.Exists(Configuration["OutputDir"]) & System.IO.File.Exists(Configuration["CsvPath"]))
             {
-
-                if (listOfSpeachFiles.ElementAt(i).Path != null)
+                for (int i = 1; i < listOfSpeachFiles.Count; i++)
                 {
-                    path += listOfSpeachFiles.ElementAt(i).Path + @"\";
-                    pathFfmpegOutput += listOfSpeachFiles.ElementAt(i).Path + @"\";
-                }
-                System.IO.Directory.CreateDirectory(path);
-                System.IO.Directory.CreateDirectory(pathFfmpegOutput);
 
-                if (!System.IO.File.Exists(path + listOfSpeachFiles.ElementAt(i).Filename))
-                {
-                    string ssmlTemp = ssml.Replace("(speechText)", listOfSpeachFiles.ElementAt(i).Translation);
+                    if (listOfSpeachFiles.ElementAt(i).Path != null)
+                    {
+                        path += listOfSpeachFiles.ElementAt(i).Path + @"\";
+                        pathFfmpegOutput += listOfSpeachFiles.ElementAt(i).Path + @"\";
+                    }
+                    System.IO.Directory.CreateDirectory(path);
+                    System.IO.Directory.CreateDirectory(pathFfmpegOutput);
 
-                    using var synthesizer = new SpeechSynthesizer(config, null);
+                    if (!System.IO.File.Exists(path + listOfSpeachFiles.ElementAt(i).Filename))
+                    {
+                        string ssmlTemp = ssml.Replace("(speechText)", listOfSpeachFiles.ElementAt(i).Translation);
 
-                    await AudioDataStream.FromResult(await synthesizer.SpeakSsmlAsync(ssmlTemp)).SaveToWaveFileAsync(path + listOfSpeachFiles.ElementAt(i).Filename);
-                    await FFmpeg(path + listOfSpeachFiles.ElementAt(i).Filename, pathFfmpegOutput + listOfSpeachFiles.ElementAt(i).Filename);
+                        using var synthesizer = new SpeechSynthesizer(config, null);
 
-                    path = Configuration["OutputDir"] + "\\Raw\\";
-                    pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
+                        await AudioDataStream.FromResult(await synthesizer.SpeakSsmlAsync(ssmlTemp)).SaveToWaveFileAsync(path + listOfSpeachFiles.ElementAt(i).Filename);
+                        await FFmpeg(path + listOfSpeachFiles.ElementAt(i).Filename, pathFfmpegOutput + listOfSpeachFiles.ElementAt(i).Filename);
 
+                        path = Configuration["OutputDir"] + "\\Raw\\";
+                        pathFfmpegOutput = Configuration["OutputDir"] + "\\ffmpegOutput\\"; ;
+
+                        fileCompleted = listOfSpeachFiles.ElementAt(i).Filename;
+                        
+
+                    }
                 }
             }
+            JsRuntime.InvokeVoidAsync("alert", "finished"); // Alert
         }
+        catch (Exception er)
+        {
+
+            JsRuntime.InvokeVoidAsync("alert", er.Message); // Alert
+        }
+
+
+
+
+
     }
 
     private async Task FFmpeg(string fileInput, string fileOutput)
     {
-
-        string flags = "\"silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse\"";
-        using (var process = new Process())
+        try
         {
-            process.StartInfo.FileName = @".\Utils\ffmpeg.exe";
-            process.StartInfo.UseShellExecute = true;
-            process.StartInfo.Arguments = $"-i {fileInput} -af {flags} {fileOutput}";
-            process.Start();
+            string flags = "\"silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_silence=0.1:start_threshold=-50dB,areverse\"";
+            using (var process = new Process())
+            {
+                process.StartInfo.FileName = @".\Utils\ffmpeg.exe";
+                process.StartInfo.UseShellExecute = true;
+                process.StartInfo.Arguments = $"-i {fileInput} -af {flags} {fileOutput}";
+                process.Start();
+            }
         }
+        catch (Exception er)
+        {
+
+            JsRuntime.InvokeVoidAsync("alert", er.Message); // Alert
+        }
+
+
+
 
 
     }
     async Task GetLanguageNames()
     {
-        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
-        using SpeechSynthesizer speechSynthesizer = new SpeechSynthesizer(config);
-        using var result = await speechSynthesizer.GetVoicesAsync();
+        try
+        {
+            var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+            using SpeechSynthesizer speechSynthesizer = new SpeechSynthesizer(config);
+            using var result = await speechSynthesizer.GetVoicesAsync();
 
-        voicesList = result.Voices.ToList<VoiceInfo>();
+            voicesList = result.Voices.ToList<VoiceInfo>();
+        }
+        catch (Exception er)
+        {
+
+            JsRuntime.InvokeVoidAsync("alert", er.Message); // Alert
+        }
+
 
     }
 
@@ -408,12 +463,28 @@ Output Dir: @Configuration["OutputDir"]
     }
     async Task SynthesizeAudioToSpeakerAsync()
     {
+        try
+        {
+            string ssml = File.ReadAllText("./Ssml/ssml.xml")
 
-        var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
-        config.SpeechSynthesisVoiceName = SelectedVoiceInfoIndex;
-        using var synthesizer = new SpeechSynthesizer(config);
+                     .Replace("(voice)", SelectedVoiceInfoIndex)
+                     .Replace("(xmlLang)", Configuration.GetValue<string>("xmlLanguage"))
+                     .Replace("(mood)", Configuration.GetValue<string>("mood"))
+                     .Replace("(speechText)", "Welcome to Edge Tea X");
+
+            var config = SpeechConfig.FromSubscription(AzureKey, AzureRegion);
+            //config.SpeechSynthesisVoiceName = SelectedVoiceInfoIndex;
+            using var synthesizer = new SpeechSynthesizer(config);
+
+            await synthesizer.SpeakSsmlAsync(ssml);
+            //await synthesizer.SpeakTextAsync("Welcome to Edge Tea X");
+        }
+        catch (Exception er)
+        {
+
+            JsRuntime.InvokeVoidAsync("alert", er.Message); // Alert
+        }
 
 
-        await synthesizer.SpeakTextAsync("Welcome to Edge Tea X");
     }
 }
